@@ -22,40 +22,40 @@ Typische FIPA-Nachrichten (aus der VL)
 ```yaml
 # start auction: publish startAuction
 - from: initiator
-	to: participant
-	action: inform-start-of-auction
+  to: participant
+  action: inform-start-of-auction
 # call for proposal: tell Registered
 - from: initiator
-	to: participant
-	action: cfp-1
+  to: participant
+  action: cfp-1
 # did not understand what auction
 - from: participant
-	to: initiator
-	action: not-understood
+  to: initiator
+  action: not-understood
 # this is my proposal: ask Offer
 - from: participant
-	to: initiator
-	action: propose
+  to: initiator
+  action: propose
 # this proposal is not enough: false
 - from: initiator
-	to: participant
-	action: reject-proposal
+  to: participant
+  action: reject-proposal
 # good proposal: true
 - from: initiator
-	to: participant
-	action: accept-proposal
+  to: participant
+  action: accept-proposal
 # propose higher: ask Offer
 - from: initiator
-	to: partcipant
-	action: cfp-2
+  to: partcipant
+  action: cfp-2
 # your proposal passed all steps: tell OfferResult
 - from: initiator
-	to: participant
-	action: inform-2
+  to: participant
+  action: inform-2
 # here is the good: CashInResult / tell AuctionResult
 - from: initiator
-	to: participant
-	action: request
+  to: participant
+  action: request
 ```
 
 ##### Umsetzung
@@ -81,37 +81,37 @@ Typische FIPA-Nachrichten (aus der VL)
 ```yaml
 # start the auction: publish startAuction
 - from: initiator
-	to: participant
-	action: inform-start-of-auction
+  to: participant
+  action: inform-start-of-auction
 # call for proposal: tell Registered
 - from: initiator
-	to: participant
-	action: cfp-1
+  to: participant
+  action: cfp-1
 # what auction?
 - from: participant
-	to: initiator
-	action: not-understood
+  to: initiator
+  action: not-understood
 # this is my proposal: ask Offer
 - from: participant
-	to: initiator
-	action: propose
+  to: initiator
+  action: propose
 # I am against that proposal: false
 - from: initiator
-	to: participant
-	action: reject-proposal
+  to: participant
+  action: reject-proposal
 # I am in favor of that proposal: true
 - from: initiator
-	to: participant
-	action: accept-proposal
+  to: participant
+  action: accept-proposal
 # Propose again: publish ask Offer
 - from: initiator
-	to: participant
-	action: cfp-2
+  to: participant
+  action: cfp-2
 # No offer above reservation price: None
 - from: initiator
-	to: participant
-	state: no-bids
-	action: inform-2
+  to: participant
+  state: no-bids
+  action: inform-2
 ```
 
 ##### Umsetzung
