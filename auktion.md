@@ -58,9 +58,6 @@ Typische FIPA-Nachrichten (aus der VL)
   action: request
 ```
 
-##### Umsetzung
-Ich weiß nicht ob das umgesetzt werden. Diese Auktion kann man nur mit einem solchen Setup umsetzen, in dem man alle aktuellen Angebote sehen kann.
-
 #### Holländische Auktion
 
 ##### Vorgehen
@@ -114,9 +111,6 @@ Typische FIPA-Nachrichten (aus der VL)
   action: inform-2
 ```
 
-##### Umsetzung
-Ich weiß nicht, ob diese Auktionsart umgesetzt werden kann. Es gibt weder eine rationale Bietstrategie für die Bieter, noch eine Möglichkeit, alle aktuellen Angebote zu verfolgen. 
-
 #### Erstpreisauktion
 
 ##### Eigenschaften
@@ -125,19 +119,6 @@ Ich weiß nicht, ob diese Auktionsart umgesetzt werden kann. Es gibt weder eine 
 - Andere erwarten wahrheitsgemäße Gebote von dem Agent und spielen deshalb strategisch ⇒ Winner's Curse
 - Rationale Strategie: $1 - \frac{1}{n}$ fache der eigenen Wertschätzung zu bieten
 - Stabil gegen mögliche Bieterkollusionen
-
-##### Umsetzung
-
-```python
-def first_price_sealed_bid(
-    self,
-    n_agents: int, 
-    wallet: Wallet, 
-    offers: dict[Agent, Offer], 
-    digest: Digest = None
-) -> Offer:
-    # TODO: implement
-```
 
 #### Zweitpreisauktion
 
