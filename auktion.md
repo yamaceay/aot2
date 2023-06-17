@@ -5,13 +5,13 @@ Die Bieter bieten $b_i$ für das Gut in einer Auktion
 
 #### Englische Auktion
 
-Vorgehen:
+##### Vorgehen
 - Der Auktionator gibt einen Startpreis $p_0$ vor
 - Die Bieter bieten nacheinander höhere Preise
 - Der Bieter mit dem höchsten Gebot erhält den Zuschlag
 - Der Bieter zahlt den Preis des zweithöchsten Gebots
 
-Eigenschaften:
+##### Eigenschaften
 - Englische Auktion ist effizient: Strategie wird durch Preislimit bestimmt
 - Preis: Wertschätzung des zweithöchsten Bieters
 - Anfällig gegenüber Kollusionen: eine erfolgreiche Absprache führt zu einem geringen Erlös
@@ -32,7 +32,7 @@ Typische FIPA-Nachrichten (aus der VL)
 - from: participant
 	to: initiator
 	action: not-understood
-# this is my proposal: publish LookingFor / ask Offer
+# this is my proposal: ask Offer
 - from: participant
 	to: initiator
 	action: propose
@@ -44,7 +44,7 @@ Typische FIPA-Nachrichten (aus der VL)
 - from: initiator
 	to: participant
 	action: accept-proposal
-# propose higher: publish LookingFor / ask Offer
+# propose higher: ask Offer
 - from: initiator
 	to: partcipant
 	action: cfp-2
@@ -58,15 +58,18 @@ Typische FIPA-Nachrichten (aus der VL)
 	action: request
 ```
 
+##### Umsetzung
+Ich weiß nicht ob das umgesetzt werden. Diese Auktion kann man nur mit einem solchen Setup umsetzen, in dem man alle aktuellen Angebote sehen kann.
+
 #### Holländische Auktion
 
-Vorgehen:
+##### Vorgehen
 - Der Auktionator gibt einen Startpreis $p_0$ vor
 - Der Preis wird in regelmäßigen Abständen gesenkt
 - Der erste Bieter, der den Preis akzeptiert, erhält den Zuschlag
 - Der Bieter zahlt den Preis $p_0$
 
-Eigenschaften:
+##### Eigenschaften
 - Der erste Bieter, der die Uhr stoppt, zahlt den angegebenen Preis
 - Weniger Kommunikation
 - Zahlungsbereitschaft und Risikobereitschaft der Mitbieter ist entscheidend
@@ -88,7 +91,7 @@ Typische FIPA-Nachrichten (aus der VL)
 - from: participant
 	to: initiator
 	action: not-understood
-# this is my proposal: publish LookingFor / ask Offer
+# this is my proposal: ask Offer
 - from: participant
 	to: initiator
 	action: propose
@@ -100,7 +103,7 @@ Typische FIPA-Nachrichten (aus der VL)
 - from: initiator
 	to: participant
 	action: accept-proposal
-# Propose again: publish LookingFor / ask Offer
+# Propose again: publish ask Offer
 - from: initiator
 	to: participant
 	action: cfp-2
@@ -111,18 +114,34 @@ Typische FIPA-Nachrichten (aus der VL)
 	action: inform-2
 ```
 
+##### Umsetzung
+Ich weiß nicht, ob diese Auktionsart umgesetzt werden kann. Es gibt weder eine rationale Bietstrategie für die Bieter, noch eine Möglichkeit, alle aktuellen Angebote zu verfolgen. 
+
 #### Erstpreisauktion
 
-Eigenschaften:
+##### Eigenschaften
 - Versiegelte Gebote, Gewinner bezahlt den höchsten Preis
 - Strategisch äquivalent zur holländischen Auktion
 - Andere erwarten wahrheitsgemäße Gebote von dem Agent und spielen deshalb strategisch ⇒ Winner's Curse
 - Rationale Strategie: $1 - \frac{1}{n}$ fache der eigenen Wertschätzung zu bieten
 - Stabil gegen mögliche Bieterkollusionen
 
+##### Umsetzung
+
+```python
+def first_price_sealed_bid(
+    self,
+    n_agents: int, 
+    wallet: Wallet, 
+    offers: dict[Agent, Offer], 
+    digest: Digest = None
+) -> Offer:
+    # TODO: implement
+```
+
 #### Zweitpreisauktion
 
-Eigenschaften:
+##### Eigenschaften
 - Versiegelte Gebote, Gewinner bezahlt den zweithöchsten Preis
 - Strategisch äquivalent zur englischen Auktion
 - Alle Agenten verhalten sich strategisch wahrheitsgemäß $b_i = v_i$

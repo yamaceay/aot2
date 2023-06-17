@@ -44,17 +44,62 @@ Attributes:
 
 `DummyBidderAgent.kt`
 
-```kotlin
+```yaml
 DummyBidderAgent:
 - broker: BrokerAgentRef
 - wallet: Wallet?
 - secret: Int
 
-+ behaviour(): Unit
-    + listen<StartAuction>(biddersTopic)
-    + on<Registered>
-    + listen<Digest>(biddersTopic)
-    + listen<LookingFor>(biddersTopic)
-    + on<AuctionResult>
-    + on<OfferResult>
+Receives:
+# - [DONE] StartAuction from topic "all-bidders"
+# - [EASY] Registered
+- LookingFor from topic "all-bidders"
+- OfferResult
+- Digest from topic "all-bidders"
+# - [EASY] AuctionResult
+
+Sends:
+# - [DONE] Register
+- LookingFor to topic "all-bidders"
+- Offer
+# - [EASY] CashIn
+```
+
+Each agent uses the following information sources when bidding:
+* `Number of Agents`
+* `Wallet` is an attribute: For keeping track of the agent's credits and goods
+* `LookingFor` is a type of message: For seeing the preferences of others
+* `Digest` is a type of message: For seeing the statistical results of the last turn
+
+```python
+
+Stats = tuple[
+    int, # number of offers
+    Price, # min price
+    Price, # median price
+    Price, # max price
+    ]
+
+Agent = str
+Good = str
+GoodOrCredit = str
+
+Amount = float
+Price = float
+PriceCount = tuple[Price, int]
+
+Wallet = dict[GoodOrCredit, Amount]
+# - update()
+# - value()
+
+Digest = dict[Good, Stats]
+Offer = dict[Good, PriceCount]
+
+def bidding_function(
+    n_agents: int, 
+    wallet: Wallet, 
+    offers: dict[Agent, Offer], 
+    digest: Digest = None
+) -> Offer:
+    # TODO: implement
 ```
