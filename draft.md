@@ -72,8 +72,8 @@ _For an intuitive explanation, refer to `biddingStrategies.md`._
 Each agent uses the following information sources when bidding:
 * `Number of Agents`
 * `Wallet` is an attribute: For keeping track of the agent's credits and goods
+* `Digest` is a type of message: For seeing the statistical results of the last turn / and also market place prices
 * `LookingFor` is a type of message: For seeing the preferences of others
-* `Digest` is a type of message: For seeing the statistical results of the last turn
 
 ```python
 
@@ -110,10 +110,10 @@ def bidding_function(
 ) -> Offer:
 
     private_preferences = calculate_private_preferences(wallet, digest)
-    
+
     public_preferences = None
     if any_agent_plays_strategically:
-        public_preferences = offers
+        public_preferences = calculate_public_preferences(offers)
     
     strategy = develop_strategy(
         private_preferences, 
@@ -123,16 +123,23 @@ def bidding_function(
 
 # Estimate the private preferences by differentiating the new wallet with one more good for a specific type and the old wallet
 def calculate_private_preferences(wallet: Wallet, digest: Digest) -> dict[GoodCount, Credit]:
-    private_preferences = {}
     goods, credits = wallet
+    old_value = value(wallet)
+
+    private_preferences = {}
+
     for good, count in goods.items():
 
         # Delta is either -1 (sell) or 1 (buy)
         # If delta is -1, then new credit would be +current_price = -1 * (-1 * current_price)
         # If delta is 1, then new credit would be -current_price = -1 * (1 * current_price)
-        for delta in [-1, 1]:
+        # Otherwise if delta is 0, preference is 0
+        for delta in [-1, 0, 1]:
+            if delta == 0:
+                private_preferences[(good, delta)] = 0
+                continue
+
             current_price = digest[good][2] # median price
-            old_value = value(wallet)
 
             wallet_copy = wallet.copy()
             
@@ -166,15 +173,8 @@ def calculate_public_preferences(offers: dict[Agent, Offer]) -> dict[Good, Credi
     return public_preferences
 
 def develop_strategy(
-    private_preferences: list[Good], 
-    public_preferences: list[Good],
+    private_preferences: dict[GoodCount, Credit],
+    public_preferences: dict[Good, Stats],
 ) -> Offer:
-    raise Exception("Not implemented")
-
-# This is the function which might call out bluffs
-def consider_bluffs(
-    digest: Digest,
-    public_preferences_digest: Digest,
-) -> Digest:
     raise Exception("Not implemented")
 ```
