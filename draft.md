@@ -79,7 +79,8 @@ Each agent uses the following information sources when bidding:
 
 Agent = str
 Good = str
-GoodCount = dict[Good, int]
+GoodCount = tuple[Good, int]
+Inventory = dict[Good, int]
 
 Credit = float 
 
@@ -90,7 +91,7 @@ Stats = tuple[
     Credit, # max price
     ]
 
-Wallet = tuple[GoodCount, Credit]
+Wallet = tuple[Inventory, Credit]
 # - update(self, Good, int, Credit)
 # - value(self) -> Credit
 
@@ -98,26 +99,21 @@ Offer = dict[Good, Credit]
 Digest = dict[Good, Stats]
 
 # Ensure that good type does not matter, except that each good is superadditive, this means: u(av + bv) >= u(av) + u(bv) for any v and any good type
+
+# any_agent_plays_strategically: If True, then the agent will try to play strategically, otherwise it will play honestly
 def bidding_function(
     n_agents: int, 
     wallet: Wallet, 
     offers: dict[Agent, Offer], 
-    digest: Digest
+    digest: Digest, 
+    any_agent_plays_strategically: bool = False, 
 ) -> Offer:
-    any_agent_plays_strategically = False
-    # False: Reactive, naive agent
-    # True: Smarter, more strategic agent
 
-    private_preferences = calculate_private_preferences(wallet)
-
+    private_preferences = calculate_private_preferences(wallet, digest)
+    
+    public_preferences = None
     if any_agent_plays_strategically:
-        public_preferences_digest = calculate_public_preferences(offers)
-        digest = consider_bluffs(
-            digest,
-            public_preferences_digest,
-    )
-
-    public_preferences = sorted(digest, key=lambda x: digest[x][2], reverse=True)
+        public_preferences = offers
     
     strategy = develop_strategy(
         private_preferences, 
@@ -126,20 +122,26 @@ def bidding_function(
     return strategy
 
 # Estimate the private preferences by differentiating the new wallet with one more good for a specific type and the old wallet
-def calculate_private_preferences(wallet: Wallet) -> dict[Good, Credit]:
+def calculate_private_preferences(wallet: Wallet, digest: Digest) -> dict[GoodCount, Credit]:
     private_preferences = {}
     goods, credits = wallet
     for good, count in goods.items():
-        old_value = value(wallet)
 
-        # Generate a new copy of wallet with one more good of given type
-        goods_copy = goods.copy()
-        goods_copy[good] = count + 1
-        wallet_copy = (goods_copy, credits)
+        # Delta is either -1 (sell) or 1 (buy)
+        # If delta is -1, then new credit would be +current_price = -1 * (-1 * current_price)
+        # If delta is 1, then new credit would be -current_price = -1 * (1 * current_price)
+        for delta in [-1, 1]:
+            current_price = digest[good][2] # median price
+            old_value = value(wallet)
 
-        # Save the preference value
-        preference = value(wallet_copy) - old_value
-        private_preferences[good] = preference
+            wallet_copy = wallet.copy()
+            
+            update(wallet_copy, good, count + delta, -delta * current_price)
+
+            # Save the preference value
+            preference = value(wallet_copy) - old_value
+
+            private_preferences[(good, delta)] = preference
 
     private_preferences = sorted(private_preferences, key=lambda x: private_preferences[x], reverse=True)
 
@@ -169,6 +171,7 @@ def develop_strategy(
 ) -> Offer:
     raise Exception("Not implemented")
 
+# This is the function which might call out bluffs
 def consider_bluffs(
     digest: Digest,
     public_preferences_digest: Digest,
