@@ -1,10 +1,11 @@
 # AOT Auction Exercise with JIAC VI
 
-Important files:
+Important docs:
 - `Auktion.pdf`: Excerpt from p. 67-80, AOT Bachelor Skript
-- `auktion.md`: Description of the auction protocols
+- `auktion.md`: Description of the known auction protocols
 - `Blatt.pdf`: Exercise sheet
 - `draft.md`: Description of the source code
+- `biddingStrategies.md`: Extra markdown which explains why agents bid the way they do
 
 In this module, we are using JIAC VI to set up a simple auction. The auctioneer side is already implemented,
 along with a very simple example bidder agent. Your task is to implement a smarter bidder agent, buying and
