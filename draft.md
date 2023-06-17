@@ -114,10 +114,11 @@ def bidding_function(
     public_preferences = None
     if any_agent_plays_strategically:
         public_preferences = calculate_public_preferences(offers)
-    
+
     strategy = develop_strategy(
         private_preferences, 
         public_preferences,
+        digest,
     )
     return strategy
 
@@ -133,12 +134,7 @@ def calculate_private_preferences(wallet: Wallet, digest: Digest) -> dict[GoodCo
         # Delta is either -1 (sell) or 1 (buy)
         # If delta is -1, then new credit would be +current_price = -1 * (-1 * current_price)
         # If delta is 1, then new credit would be -current_price = -1 * (1 * current_price)
-        # Otherwise if delta is 0, preference is 0
-        for delta in [-1, 0, 1]:
-            if delta == 0:
-                private_preferences[(good, delta)] = 0
-                continue
-
+        for delta in [-1, 1]:
             current_price = digest[good][2] # median price
 
             wallet_copy = wallet.copy()
@@ -175,6 +171,60 @@ def calculate_public_preferences(offers: dict[Agent, Offer]) -> dict[Good, Credi
 def develop_strategy(
     private_preferences: dict[GoodCount, Credit],
     public_preferences: dict[Good, Stats],
+    digest: Digest,
 ) -> Offer:
-    raise Exception("Not implemented")
+    offer = {}
+
+    private_preferences_reshaped = {}
+    for (good, count), private_value in private_preferences.items():
+        if good not in private_preferences_reshaped:
+            private_preferences_reshaped[good] = {}
+        private_preferences_reshaped[good][count] = private_value
+
+    for good, count_private_value in private_preferences_reshaped:
+        n_actual_agents, _, actual_price, _ = digest[good]
+
+        if public_preferences is None or good not in public_preferences:
+            count = max(count_private_value, key=lambda x: count_private_value[x])
+            private_value = count_private_value[count]
+
+            # If selling pays off or buying does not, then bid should be lower
+            # If buying pays off or selling does not, then bid should be higher
+            bid = actual_price + count * private_value
+            offer[good] = bid
+            
+            continue
+        
+        n_smart_agents, _, bluffed_price, _ = public_preferences[good]
+
+        # TODO: Implement (see my heuristic below)
+    return offer
 ```
+
+#### My Heuristic
+
+Preference of other agents:
+
+* If the bluffed price is below the actual price, then agents are in general more willing to buy
+* If the bluffed price is above the actual price, then agents are in general more willing to sell
+
+Preference of this agent:
+
+Now consider the cases if this agent wants to buy / sell: private values are already calculated
+
+If the number of smart agents is very high: Preferences of other agents are more important than the preferences of this agent
+
+We can realize this by calculating the weighted sum of the bluffed price and the actual price like this:
+* $(n_smart_agents * bluffed_price + n_actual_agents * actual_price) / (n_smart_agents + n_actual_agents)$
+
+Assuming the number of smart agents is high, then the following cases can happen:
+
+- [COMPETITIVE] I buy / y'all buy: Remember the strategic decision of subtracting $price / n_smart_agents$ from the bid
+
+- [SAFE] I buy / y'all sell: Adding $price / n_smart_agents$ to the bid would help keep the price low
+
+Similarly, for selling:
+
+- [COMPETITIVE] I sell / y'all sell: Add $price / n_smart_agents$ to the bid
+
+- [SAFE] I sell / y'all buy: Subtract $price / n_smart_agents$ from the bid

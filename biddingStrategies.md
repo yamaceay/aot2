@@ -28,10 +28,7 @@ The optimal balance is established by the agents who want to maximize their cred
 Let's consider optimal strategies in both cases assuming every agent plays strategically:
 
 The optimal buying strategy: Bluff to pay $\frac{v_i}{n}$ less than private preference $v_i$
-
-- If every agent except $A_1$ plays honest, $A_1$ can bluff to pay nothing ($v_1 - \frac{v_1}{1} = 0$) for $X$
-- If every agent except $A_1$ and $A_2$ plays honest, $A_1$ can bluff to pay $\frac{v_1}{2}$ ( = $v_1 - \frac{v_1}{2}$), but not zero, and $A_2$ can bluff to pay $\frac{v_2}{2}$ ( = $v_2 - \frac{v_2}{2}$) for $X$
-…
+* This is also the next highest bid among all bids lower than this agent's bid, e.g. $v_3$ for $A_2$, $v_4$ for $A_3$. 
 
 Similarly, the optimal selling strategy: Bluff to sell $\frac{v_i}{n}$ more than private preference $v_i$
 
