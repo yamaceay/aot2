@@ -51,10 +51,10 @@ DummyBidderAgent:
 - secret: Int
 
 + behaviour(): Unit
-    + listen<StartAuction>(biddersTopic): Unit
-    + listen<Registered>(biddersTopic): Unit
-    + listen<Digest>(biddersTopic): Unit
-    + listen<LookingFor>(biddersTopic): Unit
-    + listen<AuctionResult>(biddersTopic): Unit
-    + listen<OfferResult>(biddersTopic): Unit
+    + listen<StartAuction>(biddersTopic)
+    + on<Registered>
+    + listen<Digest>(biddersTopic)
+    + listen<LookingFor>(biddersTopic)
+    + on<AuctionResult>
+    + on<OfferResult>
 ```

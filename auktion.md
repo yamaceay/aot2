@@ -122,6 +122,7 @@ Eigenschaften:
 
 #### Zweitpreisauktion
 
+Eigenschaften:
 - Versiegelte Gebote, Gewinner bezahlt den zweithöchsten Preis
 - Strategisch äquivalent zur englischen Auktion
 - Alle Agenten verhalten sich strategisch wahrheitsgemäß $b_i = v_i$
