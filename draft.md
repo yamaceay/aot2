@@ -215,7 +215,7 @@ Now consider the cases if this agent wants to buy / sell: private values are alr
 If the number of smart agents is very high: Preferences of other agents are more important than the preferences of this agent
 
 We can realize this by calculating the weighted sum of the bluffed price and the actual price like this:
-* $(n_smart_agents * bluffed_price + n_actual_agents * actual_price) / (n_smart_agents + n_actual_agents)$
+* $\frac{\text{n_smart_agents} * \text{bluffed_price} + \text{n_actual_agents} * \text{actual_price}}{\text{n_smart_agents} + \text{n_actual_agents}}$
 
 Assuming the number of smart agents is high, then the following cases can happen:
 
