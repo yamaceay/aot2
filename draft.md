@@ -219,12 +219,12 @@ We can realize this by calculating the weighted sum of the bluffed price and the
 
 Assuming the number of smart agents is high, then the following cases can happen:
 
-- [COMPETITIVE] I buy / y'all buy: Remember the strategic decision of subtracting $price / n_smart_agents$ from the bid
+- [COMPETITIVE] I buy / y'all buy: Remember the strategic decision of subtracting $\frac{price}{\text{nSmartAgents}}$ from the bid
 
-- [SAFE] I buy / y'all sell: Adding $price / n_smart_agents$ to the bid would help keep the price low
+- [SAFE] I buy / y'all sell: Adding $\frac{price}{\text{nSmartAgents}}$ to the bid would help keep the price low
 
 Similarly, for selling:
 
-- [COMPETITIVE] I sell / y'all sell: Add $price / n_smart_agents$ to the bid
+- [COMPETITIVE] I sell / y'all sell: Add $\frac{price}{\text{nSmartAgents}}$ to the bid
 
-- [SAFE] I sell / y'all buy: Subtract $price / n_smart_agents$ from the bid
+- [SAFE] I sell / y'all buy: Subtract $\frac{price}{\text{nSmartAgents}}$ from the bid
