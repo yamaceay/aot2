@@ -184,20 +184,31 @@ def develop_strategy(
     for good, count_private_value in private_preferences_reshaped:
         n_actual_agents, _, actual_price, _ = digest[good]
 
-        if public_preferences is None or good not in public_preferences:
-            count = max(count_private_value, key=lambda x: count_private_value[x])
-            private_value = count_private_value[count]
+        max_count = max(count_private_value, key=lambda x: count_private_value[x])
+        max_private_value = count_private_value[max_count]
 
-            # If selling pays off or buying does not, then bid should be lower
-            # If buying pays off or selling does not, then bid should be higher
-            bid = actual_price + count * private_value
-            offer[good] = bid
-            
-            continue
-        
-        n_smart_agents, _, bluffed_price, _ = public_preferences[good]
+        if public_preferences is not None and good in public_preferences:
 
-        # TODO: Implement (see my heuristic below)
+            # TODO: Implement (see my heuristic below)
+            n_smart_agents, _, bluffed_price, _ = public_preferences[good]
+
+            delta_price = (bluffed_price - actual_price) * n_smart_agents / (n_smart_agents + n_actual_agents)
+
+            for count, private_value in count_private_value.items():
+
+                # Private value is adjusted depending on two factors:
+                # 1. Whether to buy or sell
+                # 2. The weighted difference between the bluffed price and the actual price
+                private_value += count * delta_price
+
+                if private_value > max_private_value:
+                    max_private_value = private_value
+                    max_count = count
+
+        # If selling pays off or buying does not, then bid should be lower
+        # If buying pays off or selling does not, then bid should be higher
+        bid = actual_price + max_count * max_private_value
+        offer[good] = bid
     return offer
 ```
 
@@ -215,16 +226,23 @@ Now consider the cases if this agent wants to buy / sell: private values are alr
 If the number of smart agents is very high: Preferences of other agents are more important than the preferences of this agent
 
 We can realize this by calculating the weighted sum of the bluffed price and the actual price like this:
-* $\frac{\text{nSmartAgents} * \text{bluffedPrice} + \text{nActualAgents} * \text{actualPrice}}{\text{nSmartAgents} + \text{nActualAgents}}$
+* $\text{price} = \frac{\text{nSmartAgents} * \text{bluffedPrice} + \text{nActualAgents} * \text{actualPrice}}{\text{nSmartAgents} + \text{nActualAgents}}$
+
+The price difference is: $\text{priceDifference} = \text{price} - \text{actualPrice} = \frac{\text{nSmartAgents}(\text{bluffedPrice} - \text{actualPrice})}{\text{nSmartAgents} + \text{nActualAgents}}$
+
+The price difference tells about the direction and the magnitude of bluffing. We can update the private value by the price difference and bid strategically.
+
+$\text{privateValue}' = \text{privateValue} + \text{priceDifference}$
 
 Assuming the number of smart agents is high, then the following cases can happen:
 
-- [COMPETITIVE] I buy / y'all buy: Remember the strategic decision of subtracting $\frac{\text{price}}{\text{nSmartAgents}}$ from the bid
+- [COMPETITIVE] I buy / y'all buy: Remember the strategic decision of subtracting $\frac{\text{privateValue}'}{\text{nSmartAgents}}$ from the bid
 
-- [SAFE] I buy / y'all sell: Adding $\frac{\text{price}}{\text{nSmartAgents}}$ to the bid would help keep the price low
+- [SAFE] I buy / y'all sell: Adding $\frac{\text{privateValue}'}{\text{nSmartAgents}}$ to the bid would help keep the price low
 
 Similarly, for selling:
 
-- [COMPETITIVE] I sell / y'all sell: Add $\frac{\text{price}}{\text{nSmartAgents}}$ to the bid
+- [COMPETITIVE] I sell / y'all sell: Add $\frac{\text{privateValue}'}{\text{nSmartAgents}}$ to the bid
 
-- [SAFE] I sell / y'all buy: Subtract $\frac{\text{price}}{\text{nSmartAgents}}$ from the bid
+- [SAFE] I sell / y'all buy: Subtract $\frac{\text{privateValue}'}{\text{nSmartAgents}}$ from the bid
+
