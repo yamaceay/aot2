@@ -4,6 +4,7 @@ import de.dailab.jiacvi.aot.auction.*
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
+import java.util.PriorityQueue
 
 /**
  * This is a simple stub of the Bidder Agent. You can use this as a template to start your implementation.
@@ -17,7 +18,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     private var secret: Int = -1
 
     private var digest: Digest? = null
-    private var privateValues: MutableMap<Pair<Item, Int>, Price> = mutableMapOf()
+    private var privateValues: List<Price> = listOf()
+    private var acceptedOffers: MutableMap<Item, PriorityQueue<Triple<Price, Int, Price>>> = mutableMapOf()
     override fun behaviour() = act {
         // TODO implement your bidding strategie. When to offer (buy/sell) items
         //  at which price. You can also use the cashin function if you need money.
@@ -39,16 +41,26 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             secret = it.secret
             log.info("Initialized Wallet: $wallet, secret: $secret")
 
-            publishInitialPrices(wallet!!)
+            tellInterest(wallet!!)
         }
 
         // be notified of result of own offer
         on<OfferResult> {
             log.info("Result for my Offer: $it")
+            var delta: Int? = null
             when (it.transfer) {
-                Transfer.SOLD   -> wallet?.update(it.item, -1, +it.price)
-                Transfer.BOUGHT -> wallet?.update(it.item, +1, -it.price)
+                Transfer.SOLD   -> { wallet?.update(it.item, -1, +it.price); delta = -1 }
+                Transfer.BOUGHT -> { wallet?.update(it.item, +1, -it.price); delta = +1 }
                 else -> {}
+            }
+            if (delta != null) {
+                if (!acceptedOffers.containsKey(it.item) || acceptedOffers[it.item] == null) {
+                    val compareByProfit: Comparator<Triple<Price, Int, Price>> = compareBy { offer -> offer.first }
+                    acceptedOffers[it.item] = PriorityQueue(compareByProfit)
+                }
+
+                val value = diffWallet(wallet!!, delta, it.item, it.price)
+                acceptedOffers[it.item]!!.add(Triple(value, delta, it.price))
             }
         }
 
@@ -56,6 +68,27 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             log.debug("Received {}", it)
             digest = it
             updatePrivateValues(wallet!!, digest!!)
+
+            for (offer in acceptedOffers) {
+                val item = offer.key
+                val queue = offer.value
+                val bestOffer = queue.peek()
+                if (bestOffer != null) {
+                    val bestDelta = bestOffer.second
+                    val cashIn = CashIn(id, secret, item, bestDelta)
+                    log.debug("Paying {}", cashIn)
+
+                    val ref = system.resolve(auctioneer)
+                    ref invoke ask<CashInResult>(offer) { res ->
+                        log.debug("CashInResult: {}", res)
+                    }
+                }
+            }
+
+            acceptedOffers.clear()
+
+
+                broker.publish(biddersTopic, LookingFor())
         }
 
         listen<LookingFor>(biddersTopic) {
@@ -71,7 +104,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     }
 
     private fun askBestOffer(item: Item) {
-        val price = privateValues.maxBy { it.value }?.value
+        val price = privateValues
             ?: (meanItemPrice(item, wallet!!)
                 ?: return)
 
@@ -82,19 +115,18 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             log.debug("OfferAccepted: $res")
         }
     }
-    private fun updatePrivateValues(wallet: Wallet, digest: Digest) {
+    private fun updatePrivateValues(wallet: Wallet, item: Item, digest: Digest): List<Price> {
+        val preferences = arrayListOf<Price>()
         val deltas = listOf(-1.0, 1.0)
-        for (walletItem in wallet.items) {
-
-            val item = walletItem.key
-            for (delta in deltas) {
-                val marketPrice = medianItemPriceWithDigest(item, digest) ?: continue
-                val count = delta.toInt()
-                val preference = diffWallet(wallet, count, item, -delta * marketPrice)
-                val itemDelta = Pair(item, count)
-                privateValues[itemDelta] = preference
-            }
+        val totalCount = wallet.items[item] ?: 0
+        for (delta in deltas) {
+            val marketPrice = medianItemPriceWithDigest(item, digest) ?: continue
+            val count = delta.toInt()
+            if (count + totalCount < 0) continue
+            val preference = diffWallet(wallet, count, item, -delta * marketPrice)
+            preferences.add(preference)
         }
+        return preferences
     }
 
     private fun medianItemPriceWithDigest(key: Item, digest: Digest): Price? {
@@ -104,7 +136,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
         return null
     }
-    private fun publishInitialPrices(wallet: Wallet) {
+    private fun tellInterest(wallet: Wallet) {
         for (walletItem in wallet.items) {
             val item = walletItem.key
             val price = meanItemPrice(item, wallet)
