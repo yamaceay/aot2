@@ -36,16 +36,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             secret = it.secret
             log.info("Initialized Wallet: $wallet, secret: $secret")
 
-            val walletCopy = wallet!!.copy()
-
-            for (walletItem in walletCopy.items) {
-                val item = walletItem.key
-                val price: Price = meanItemPrice(item, walletCopy) ?: continue
-                val lookingFor = LookingFor(item, price)
-
-                log.info("Sending $lookingFor")
-                broker.publish(biddersTopic, lookingFor)
-            }
+            publishInitialPrices(wallet!!)
         }
 
         // be notified of result of own offer
@@ -73,20 +64,34 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
 
+    private fun publishInitialPrices(wallet: Wallet) {
+        for (walletItem in wallet.items) {
+            val price = meanItemPrice(walletItem.key, wallet)
+            if (price != null) {
+                val lookingFor = LookingFor(walletItem.key, price)
+                log.info("Sending $lookingFor")
+                broker.publish(biddersTopic, lookingFor)
+            }
+        }
+    }
+    
     private fun meanItemPrice(key: Item, wallet: Wallet): Price? {
         if (wallet.items.containsKey(key)) {
             val itemCount = wallet.items[key]
             if (itemCount != null && itemCount != 0) {
                 val oldValue = wallet.value()
 
-                val walletCopyWithoutItems = wallet.copy()
-                walletCopyWithoutItems.update(key, -itemCount, 0.0)
-                val oldValueWithoutItems = walletCopyWithoutItems.value()
+                val walletWithoutItems = copyWallet(wallet)
+                walletWithoutItems.update(key, -itemCount, 0.0)
+                val oldValueWithoutItems = walletWithoutItems.value()
 
                 val itemValue = (oldValue - oldValueWithoutItems).toDouble()
                 return itemValue / itemCount
             }
         }
         return null
+    }
+    private fun copyWallet(wallet: Wallet): Wallet {
+        return Wallet(wallet.bidderId, wallet.items.toMutableMap(), wallet.credits)
     }
 }
