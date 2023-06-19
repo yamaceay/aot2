@@ -15,7 +15,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     // keep track of the bidder agent's own wallet
     private var wallet: Wallet? = null
     private var secret: Int = -1
-
     override fun behaviour() = act {
         // TODO implement your bidding strategie. When to offer (buy/sell) items
         //  at which price. You can also use the cashin function if you need money.
@@ -36,6 +35,17 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             wallet = Wallet(id, it.items.toMutableMap(), it.credits)
             secret = it.secret
             log.info("Initialized Wallet: $wallet, secret: $secret")
+
+            val walletCopy = wallet!!.copy()
+
+            for (walletItem in walletCopy.items) {
+                val item = walletItem.key
+                val price: Price = meanItemPrice(item, walletCopy) ?: continue
+                val lookingFor = LookingFor(item, price)
+
+                log.info("Sending $lookingFor")
+                broker.publish(biddersTopic, lookingFor)
+            }
         }
 
         // be notified of result of own offer
@@ -49,11 +59,11 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
 
         listen<Digest>(biddersTopic) {
-            log.debug("Received Digest: $it")
+            log.debug("Received Digest: {}", it)
         }
 
         listen<LookingFor>(biddersTopic) {
-            log.debug("Received LookingFor: $it")
+            log.debug("Received LookingFor: {}", it)
         }
 
         // be notified of result of the entire auction
@@ -61,7 +71,22 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             log.info("Result of Auction: $it")
             wallet = null
         }
-
     }
 
+    private fun meanItemPrice(key: Item, wallet: Wallet): Price? {
+        if (wallet.items.containsKey(key)) {
+            val itemCount = wallet.items[key]
+            if (itemCount != null && itemCount != 0) {
+                val oldValue = wallet.value()
+
+                val walletCopyWithoutItems = wallet.copy()
+                walletCopyWithoutItems.update(key, -itemCount, 0.0)
+                val oldValueWithoutItems = walletCopyWithoutItems.value()
+
+                val itemValue = (oldValue - oldValueWithoutItems).toDouble()
+                return itemValue / itemCount
+            }
+        }
+        return null
+    }
 }
