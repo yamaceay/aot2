@@ -18,7 +18,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     private var secret: Int = -1
 
     private var digest: Digest? = null
-    private var privateValues: List<Price> = listOf()
     private var acceptedOffers: MutableMap<Item, PriorityQueue<Triple<Price, Int, Price>>> = mutableMapOf()
     override fun behaviour() = act {
         // TODO implement your bidding strategie. When to offer (buy/sell) items
@@ -41,7 +40,9 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             secret = it.secret
             log.info("Initialized Wallet: $wallet, secret: $secret")
 
-            tellInterest(wallet!!)
+            for (walletItem in wallet!!.items) {
+                publishLookingFor(walletItem.key)
+            }
         }
 
         // be notified of result of own offer
@@ -67,7 +68,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         listen<Digest>(biddersTopic) {
             log.debug("Received {}", it)
             digest = it
-            updatePrivateValues(wallet!!, digest!!)
 
             for (offer in acceptedOffers) {
                 val item = offer.key
@@ -86,9 +86,9 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             }
 
             acceptedOffers.clear()
-
-
-                broker.publish(biddersTopic, LookingFor())
+            for (item in digest!!.itemStats.keys) {
+                publishLookingFor(item)
+            }
         }
 
         listen<LookingFor>(biddersTopic) {
@@ -103,10 +103,25 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
 
+    private fun getPrice(item: Item): Price? {
+        val price = if (digest != null) {
+            val medianPrice = medianItemPriceWithDigest(item, digest!!)!!
+            val privateValues = getPrivateValue(wallet!!, item, digest!!)
+            val privateValue = privateValues.maxBy { it.value }
+            if (privateValue != null) {
+                val count = privateValue.key.toDouble()
+                val value = privateValue.value
+                medianPrice + count * value
+            } else {
+                meanItemPrice(item, wallet!!)
+            }
+        } else {
+            meanItemPrice(item, wallet!!)
+        }
+        return price
+    }
     private fun askBestOffer(item: Item) {
-        val price = privateValues
-            ?: (meanItemPrice(item, wallet!!)
-                ?: return)
+        val price = getPrice(item) ?: return
 
         val offer = Offer(id, secret, item, price)
         log.debug("Sending {}", offer)
@@ -115,18 +130,18 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             log.debug("OfferAccepted: $res")
         }
     }
-    private fun updatePrivateValues(wallet: Wallet, item: Item, digest: Digest): List<Price> {
-        val preferences = arrayListOf<Price>()
-        val deltas = listOf(-1.0, 1.0)
+    private fun getPrivateValue(wallet: Wallet, item: Item, digest: Digest): MutableMap<Int, Price>  {
+        val privateValue = mutableMapOf<Int, Price>()
         val totalCount = wallet.items[item] ?: 0
+        val deltas = listOf(-1.0, 1.0)
         for (delta in deltas) {
             val marketPrice = medianItemPriceWithDigest(item, digest) ?: continue
             val count = delta.toInt()
             if (count + totalCount < 0) continue
             val preference = diffWallet(wallet, count, item, -delta * marketPrice)
-            preferences.add(preference)
+            privateValue[count] = preference
         }
-        return preferences
+        return privateValue
     }
 
     private fun medianItemPriceWithDigest(key: Item, digest: Digest): Price? {
@@ -136,15 +151,12 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
         return null
     }
-    private fun tellInterest(wallet: Wallet) {
-        for (walletItem in wallet.items) {
-            val item = walletItem.key
-            val price = meanItemPrice(item, wallet)
-            if (price != null) {
-                val lookingFor = LookingFor(item, price)
-                log.info("Sending $lookingFor")
-                broker.publish(biddersTopic, lookingFor)
-            }
+    private fun publishLookingFor(item: Item) {
+        val price = getPrice(item)
+        if (price != null) {
+            val lookingFor = LookingFor(item, price)
+            log.info("Sending $lookingFor")
+            broker.publish(biddersTopic, lookingFor)
         }
     }
 
