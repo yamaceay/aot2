@@ -15,6 +15,9 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     // keep track of the bidder agent's own wallet
     private var wallet: Wallet? = null
     private var secret: Int = -1
+
+    private var digest: Digest? = null
+    private var privateValues: MutableMap<Pair<Item, Int>, Price> = mutableMapOf()
     override fun behaviour() = act {
         // TODO implement your bidding strategie. When to offer (buy/sell) items
         //  at which price. You can also use the cashin function if you need money.
@@ -50,11 +53,14 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
 
         listen<Digest>(biddersTopic) {
-            log.debug("Received Digest: {}", it)
+            log.debug("Received {}", it)
+            digest = it
+            updatePrivateValues(wallet!!, digest!!)
         }
 
         listen<LookingFor>(biddersTopic) {
-            log.debug("Received LookingFor: {}", it)
+            log.debug("Received {}", it)
+            askBestOffer(it.item)
         }
 
         // be notified of result of the entire auction
@@ -64,32 +70,69 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
 
+    private fun askBestOffer(item: Item) {
+        val price = privateValues.maxBy { it.value }?.value
+            ?: (meanItemPrice(item, wallet!!)
+                ?: return)
+
+        val offer = Offer(id, secret, item, price)
+        log.debug("Sending {}", offer)
+        val ref = system.resolve(auctioneer)
+        ref invoke ask<Boolean>(offer) { res ->
+            log.debug("OfferAccepted: $res")
+        }
+    }
+    private fun updatePrivateValues(wallet: Wallet, digest: Digest) {
+        val deltas = listOf(-1.0, 1.0)
+        for (walletItem in wallet.items) {
+
+            val item = walletItem.key
+            for (delta in deltas) {
+                val marketPrice = medianItemPriceWithDigest(item, digest) ?: continue
+                val count = delta.toInt()
+                val preference = diffWallet(wallet, count, item, -delta * marketPrice)
+                val itemDelta = Pair(item, count)
+                privateValues[itemDelta] = preference
+            }
+        }
+    }
+
+    private fun medianItemPriceWithDigest(key: Item, digest: Digest): Price? {
+        if (digest.itemStats.containsKey(key)) {
+            val stats = digest.itemStats[key]!!
+            return stats.median
+        }
+        return null
+    }
     private fun publishInitialPrices(wallet: Wallet) {
         for (walletItem in wallet.items) {
-            val price = meanItemPrice(walletItem.key, wallet)
+            val item = walletItem.key
+            val price = meanItemPrice(item, wallet)
             if (price != null) {
-                val lookingFor = LookingFor(walletItem.key, price)
+                val lookingFor = LookingFor(item, price)
                 log.info("Sending $lookingFor")
                 broker.publish(biddersTopic, lookingFor)
             }
         }
     }
-    
+
     private fun meanItemPrice(key: Item, wallet: Wallet): Price? {
         if (wallet.items.containsKey(key)) {
             val itemCount = wallet.items[key]
             if (itemCount != null && itemCount != 0) {
-                val oldValue = wallet.value()
-
-                val walletWithoutItems = copyWallet(wallet)
-                walletWithoutItems.update(key, -itemCount, 0.0)
-                val oldValueWithoutItems = walletWithoutItems.value()
-
-                val itemValue = (oldValue - oldValueWithoutItems).toDouble()
+                val itemValue = diffWallet(wallet, itemCount, key)
                 return itemValue / itemCount
             }
         }
         return null
+    }
+
+    private fun diffWallet(wallet: Wallet, count: Int, item: Item, credits: Price = 0.0): Price {
+        val oldValue = wallet.value()
+        val walletWithoutItems = copyWallet(wallet)
+        walletWithoutItems.update(item, -count, credits)
+        val oldValueWithoutItems = walletWithoutItems.value()
+        return (oldValue - oldValueWithoutItems).toDouble()
     }
     private fun copyWallet(wallet: Wallet): Wallet {
         return Wallet(wallet.bidderId, wallet.items.toMutableMap(), wallet.credits)
