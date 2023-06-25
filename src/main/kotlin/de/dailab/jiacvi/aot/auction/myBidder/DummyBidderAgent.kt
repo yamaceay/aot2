@@ -5,6 +5,7 @@ import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
 import kotlin.math.max
+import kotlin.math.sqrt
 
 /**
  * This is a simple stub of the Bidder Agent. You can use this as a template to start your implementation.
@@ -19,7 +20,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
-
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -135,60 +135,69 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         broker.publish(biddersTopic, lookingFor)
     }
 
-    // Measure the difference in wallet value if the item count is changed by delta
-    // The price is also the difference
+    // Strategy #1: If the buying is more lucrative than selling
+    //   send the selling price to others, otherwise send the buying price
+    // Reason: Lower the prices if trying to buy and vice versa
     private fun getPriceOnRegistered(item: Item): Price {
-        val privatePrice = getPrivatePrice(item)
+        val mySellValue = score(item, Delta.SELL)
+        val myBuyValue = score(item, Delta.BUY)
+        val myFakedPrice = if (mySellValue < myBuyValue) mySellValue else myBuyValue
 
-        // TODO: val price, bluff
-        val price = 0.0
-        val bluff = 0.0
-
-        return price
+        // Debugging
+        if (myFakedPrice == mySellValue) {
+            log.debug("Faking to sell {} for {}", item, myFakedPrice)
+        } else {
+            log.debug("Faking to buy {} for {}", item, myFakedPrice)
+        }
+        return myFakedPrice
     }
 
-    // Assume the market price is the median of the rival bids
-    // If trusted, the market price is equal to the median of the rival bids -> Normal stakes
-    // If not trusted, the median of the rival bids is different from the real market price
-    //      If the median is higher than the real market price, the players want to sell -> Buy to them -> Lower stakes
-    //      If the median is lower than the real market price, the players want to buy -> Sell to them -> Higher stakes
+    // Strategy #1: Assume that the market price is the median of the rival bids
+    //   and the private preference is calculated by using the rival price
+    //   because we don't have another choice or information source to check if
+    //   the rivals are bluffing or not
+    // Return the price of action which is more lucrative
     private fun getPriceOnLookingFor(item: Item): Price {
         val marketPrice = median(rivalBids[item]!!)
-        val privatePrice = getPrivatePrice(item)
+        val mySellValue = score(item, Delta.SELL, marketPrice)
+        val myBuyValue = score(item, Delta.BUY, marketPrice)
+        val myRealPrice = if (mySellValue < myBuyValue) myBuyValue else mySellValue
 
-        // TODO: val price, bluff
-        val price = 0.0
-        val bluff = 0.0
-        return getPrice(item, price, bluff)
+        // Debugging
+        if (mySellValue < myBuyValue) {
+            log.debug("Actually wanting to sell {} for {}", item, mySellValue)
+        } else {
+            log.debug("Actually wanting to buy {} for {}", item, myBuyValue)
+        }
+        return myRealPrice
     }
 
+    // Strategy #1: Assume that now we have a valid market price and the
+    //   rival price too. Similar as in getPriceOnRegistered, we can fake
+    //   the image of selling it, whereas we want in fact to buy it (or vice versa)
+    //   Assuming the rival is
     private fun getPriceOnDigest(item: Item): Price {
-        val rivalPrice = median(rivalBids[item]!!)
+        val mySellValue = score(item, Delta.SELL)
+        val myBuyValue = score(item, Delta.BUY)
+        val myFakedPrice = if (mySellValue < myBuyValue) mySellValue else myBuyValue
+
+        val theirPublicPrice = median(rivalBids[item]!!)
         val marketPrice = digest!!.itemStats[item]!!.median
-        val privatePrice = getPrivatePrice(item)
 
-        // TODO: val price, bluff
-        val price = 0.0
-        val bluff = 0.0
-        return getPrice(item, price, bluff)
-    }
+        // Rival wants to buy: 8 / 5 = 5 / 3 = 3 / 2 = ... golden ratio
+        // Rival wants to sell: 3 / 5 = 2 / 3 = ... inverse of golden ratio
+        // marketPrice ** 2 / theirPublicPrice = theirActualPrice
+        // Making their actual prices public -> faking their opposite tendency
+        val theirActualPrice = marketPrice * marketPrice / theirPublicPrice
+        val actualRivalTendency = if (theirActualPrice > theirPublicPrice) Delta.BUY else Delta.SELL
+        val geometricMeanOfBluffedPrices = sqrt(myFakedPrice * theirActualPrice)
 
-    private fun getPrice(item: Item, price: Price, bluff: Price): Price {
-        val delta = gain(item, price)
-        val diff = score(item, delta, price)
-        val sign = bluff * delta.toInt()
-        return price + sign * diff
-    }
-
-    private fun getPrivatePrice(item: Item): Price {
-        val delta = gain(item)
-        return score(item, delta)
-    }
-    private fun gain(item: Item, price: Price = 0.0): Delta {
-        val sellDiff = score(item, Delta.SELL, price)
-        val buyDiff = score(item, Delta.BUY, price)
-        val maxDiff = max(sellDiff, buyDiff)
-        return if (maxDiff > 0) if (maxDiff == buyDiff) Delta.BUY else Delta.SELL else Delta.STAY
+        // Debugging
+        log.debug("Rival wants to {} at {}", actualRivalTendency, theirActualPrice)
+        log.debug("I want to fake my private preference and buy / sell at {}", marketPrice)
+        log.debug("My best price range: between {} and {}", myFakedPrice, theirActualPrice)
+        log.debug("So my best price is: {}", geometricMeanOfBluffedPrices)
+        return geometricMeanOfBluffedPrices
     }
 
     private fun score(item: Item, want: Delta, marketPrice: Price = 0.0): Price {
@@ -200,7 +209,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             transferAmount *= 2
         }
 
-        return diffWallet(wallet!!, item, want.toInt(), transferAmount)
+        val difference = diffWallet(wallet!!, item, want.toInt(), transferAmount)
+        return want.toInt() * difference
     }
     private fun diffWallet(wallet: Wallet, item: Item, count: Int, credits: Price = 0.0): Price {
         val oldValue = wallet.value()
