@@ -1,29 +1,34 @@
-#### Annahmen 
+## Annahmen 
 
 Geometrische Verteilung:  
 * Multiplikation (bzw. Division) statt Addition (bzw. Subtraktion).
 * Geometrisches Mittel `sqrt(a * b)` statt Arithmetisches Mittel `(a + b) / 2`
 Median statt Durchschnitt zur Marktpreisbestimmung: 
 * Die Höhe der extremen Preise dürfen nicht den Markt beeinflussen (robust to outliers).
+
 Superadditivität: 
 * `v(n + 1) - v(n) >= v(n) - v(n - 1)`
 * Wertsteigerung durch Kauf ist mindestens so groß wie Wertsteigerung durch Verkauf.
 * Ein Agent, der die Mehrheit aller `a`'s besitzt, kann ein Monopol bilden und den Preis manipulieren.
+
 Eigeninteresse:
 * Der Agent ist eigeninteressiert, er will seinen Gewinn maximieren.
+
 Strategisches Bieten: 
 * Der Agent, der wahrheitsgemäß bietet, wird von den anderen Agenten ausgenutzt, deshalb sollte er strategisch bieten.
 * Wer die Präferenzen anderer Agenten gut vorhersieht, kann die Preise manipulieren und dadurch hohe Gewinne erzielen.
+
 `rivalBids`: 
 * LookingFor-Nachrichten werden von den Agenten benutzt, um die Preise durch Bluffen zu manipulieren. 
 * Ein Agent, der wahrheitsgemäß bietet, würde nicht bluffen.
 * Deshalb sollte er immer seine eigene Präferenz bieten unabhängig von allen LookingFor-Nachrichten.
+
 `digest`: 
 * Digest-Nachrichten sind die Ergebnisse aller Bids und stellt eine korrekte Zusammenfassung der Marktsituation dar.
 * Die Agenten können die Digest-Nachrichten benutzen, um herauszufinden, inwieweit die anderen Agenten bluffen.
 * Die wahren Präferenzen anderer zur Kenntnis nehmend, können sie ihre Preisstrategie neu anpassen.
 
-#### Preisbestimmung
+## Preisbestimmung
 
 `getPriceOnRegistered`: 
 * Informationsquellen: `wallet`.
@@ -56,7 +61,7 @@ Strategisches Bieten:
 * Anders als bei `getPriceOnDigest` wird hier nicht geblufft, sondern wahrheitsgemäß geboten.
 * Abhängig davon, wie weit der Bluff-Preis vom Marktpreis entfernt ist, kann der Agent den erwünschten Preis nicht bestimmen.
 
-#### Implementierung
+## Implementierung
 
 ```kotlin
 private fun getPriceOnRegistered(item: Item): Price {
