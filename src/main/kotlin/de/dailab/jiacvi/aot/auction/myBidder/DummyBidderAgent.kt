@@ -24,9 +24,9 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         SELL, STAY, BUY;
         fun toInt(): Int {
             return when (this) {
-                SELL -> 1
+                SELL -> -1
                 STAY -> 0
-                BUY -> -1
+                BUY -> 1
             }
         }
     }
