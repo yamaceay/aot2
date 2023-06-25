@@ -4,7 +4,6 @@ import de.dailab.jiacvi.aot.auction.*
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
-import java.util.PriorityQueue
 import kotlin.math.max
 
 /**
@@ -20,8 +19,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
-    private var acceptedOffers: MutableMap<Item, PriorityQueue<Triple<Price, Delta, Price>>> = mutableMapOf()
-    private var priceChange: Double = 1.0 // 0: Trust, 1: Distrust
 
     enum class Delta {
         SELL, STAY, BUY;
@@ -84,22 +81,10 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         // be notified of result of own offer
         on<OfferResult> {
             log.info("Result for my Offer: $it")
-            val delta = when (it.transfer) {
-                Transfer.SOLD   -> { wallet?.update(it.item, -1, +it.price); -1
-                }
-
-                Transfer.BOUGHT -> { wallet?.update(it.item, +1, -it.price); +1
-                }
-
-                else -> 0
-            }
-            if (delta != 0) {
-                acceptedOffers.putIfAbsent(it.item, PriorityQueue(
-                    compareBy { offer -> offer.first }
-                ))
-
-                val value = diffWallet(wallet!!, it.item, delta, it.price)
-                acceptedOffers[it.item]!!.add(Triple(value, toDelta(delta), it.price))
+            when (it.transfer) {
+                Transfer.SOLD -> wallet?.update(it.item, -1, +it.price)
+                Transfer.BOUGHT -> wallet?.update(it.item, +1, -it.price)
+                else -> {}
             }
         }
 
@@ -107,20 +92,13 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             log.debug("Received {}", it)
             digest = it
 
-            for (entry in acceptedOffers.entries) {
-                val item = entry.key
-                val numItems = entry.value.sumBy { offer -> offer.second.toInt() }
-                val meanPrice = entry.value.sumByDouble { offer -> offer.third } / entry.value.size
-                val creditGain = - numItems * meanPrice
-                log.debug("Item: {}, numItems: {}, creditGain: {}", item, numItems, creditGain)
-
+            for (item in it.itemStats.keys) {
                 val price = getPriceOnDigest(item)
                 if (price >= 0.0) {
                     publishLookingFor(item, price)
                 }
             }
             rivalBids = mutableMapOf()
-            acceptedOffers.clear()
         }
 
         // be notified of result of the entire auction
@@ -160,8 +138,13 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     // Measure the difference in wallet value if the item count is changed by delta
     // The price is also the difference
     private fun getPriceOnRegistered(item: Item): Price {
-        val delta = gain(item)
-        return score(item, delta)
+        val privatePrice = getPrivatePrice(item)
+
+        // TODO: val price, bluff
+        val price = 0.0
+        val bluff = 0.0
+
+        return price
     }
 
     // Assume the market price is the median of the rival bids
@@ -170,25 +153,36 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     //      If the median is higher than the real market price, the players want to sell -> Buy to them -> Lower stakes
     //      If the median is lower than the real market price, the players want to buy -> Sell to them -> Higher stakes
     private fun getPriceOnLookingFor(item: Item): Price {
-        val price = median(rivalBids[item]!!)
-        return getPrice(item, price)
+        val marketPrice = median(rivalBids[item]!!)
+        val privatePrice = getPrivatePrice(item)
+
+        // TODO: val price, bluff
+        val price = 0.0
+        val bluff = 0.0
+        return getPrice(item, price, bluff)
     }
 
     private fun getPriceOnDigest(item: Item): Price {
-        val predictedPrice = median(rivalBids[item]!!)
-        val actualPrice = digest!!.itemStats[item]!!.median
-        priceChange = 1 - predictedPrice / actualPrice
-        if (priceChange < 0) priceChange = -priceChange
-        log.debug("PredictedPrice: {}, ActualPrice: {}", predictedPrice, actualPrice)
-        log.debug("PriceChange: {}", priceChange)
-        return getPrice(item, actualPrice)
+        val rivalPrice = median(rivalBids[item]!!)
+        val marketPrice = digest!!.itemStats[item]!!.median
+        val privatePrice = getPrivatePrice(item)
+
+        // TODO: val price, bluff
+        val price = 0.0
+        val bluff = 0.0
+        return getPrice(item, price, bluff)
     }
 
-    private fun getPrice(item: Item, price: Price): Price {
+    private fun getPrice(item: Item, price: Price, bluff: Price): Price {
         val delta = gain(item, price)
         val diff = score(item, delta, price)
-        val sign = priceChange * delta.toInt()
+        val sign = bluff * delta.toInt()
         return price + sign * diff
+    }
+
+    private fun getPrivatePrice(item: Item): Price {
+        val delta = gain(item)
+        return score(item, delta)
     }
     private fun gain(item: Item, price: Price = 0.0): Delta {
         val sellDiff = score(item, Delta.SELL, price)
