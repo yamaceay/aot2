@@ -194,6 +194,25 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         else wallet!!.items.minBy { it.value }!!.key
     }
 
+    private fun getGoodPriorities(): MutableMap<Item, Delta> {
+        val priorities = mutableMapOf<Item, Delta>()
+        for (item in wallet!!.items.keys) {
+            priorities[item] = getGoodPriority(item)
+        }
+        return priorities
+    }
+    private fun getGoodPriority(item: Item): Delta {
+        val marketPrice = median(rivalBids[item]!!)
+
+        val best = scores(item, marketPrice).maxBy { it.value }
+        if (best != null) {
+            if (best.value > 0) {
+                return best.key
+            }
+        }
+        return Delta.SELL
+    }
+
     private fun scores(item: Item, price: Price = 0.0): MutableMap<Delta, Price> {
         return mutableMapOf(
             Delta.SELL to score(item, Delta.SELL, price),
