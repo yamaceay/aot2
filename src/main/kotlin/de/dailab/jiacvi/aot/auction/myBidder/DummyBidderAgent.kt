@@ -20,6 +20,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
     private val explorationRate: Double = 0.5
+    private val nPreferredGoods: Int = 2
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -192,25 +193,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     private fun selectItemToSell(): Item {
         return if (Math.random() < explorationRate) wallet!!.items.keys.random()
         else wallet!!.items.minBy { it.value }!!.key
-    }
-
-    private fun getGoodPriorities(): MutableMap<Item, Delta> {
-        val priorities = mutableMapOf<Item, Delta>()
-        for (item in wallet!!.items.keys) {
-            priorities[item] = getGoodPriority(item)
-        }
-        return priorities
-    }
-    private fun getGoodPriority(item: Item): Delta {
-        val marketPrice = median(rivalBids[item]!!)
-
-        val best = scores(item, marketPrice).maxBy { it.value }
-        if (best != null) {
-            if (best.value > 0) {
-                return best.key
-            }
-        }
-        return Delta.SELL
     }
 
     private fun scores(item: Item, price: Price = 0.0): MutableMap<Delta, Price> {

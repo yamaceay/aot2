@@ -3,6 +3,7 @@
 Geometrische Verteilung:  
 * Multiplikation (bzw. Division) statt Addition (bzw. Subtraktion).
 * Geometrisches Mittel `sqrt(a * b)` statt Arithmetisches Mittel `(a + b) / 2`
+
 Median statt Durchschnitt zur Marktpreisbestimmung: 
 * Die Höhe der extremen Preise dürfen nicht den Markt beeinflussen (robust to outliers).
 
