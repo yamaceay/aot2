@@ -6,9 +6,6 @@ import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
 import kotlin.math.sqrt
 
-/**
- * This is a simple stub of the Bidder Agent. You can use this as a template to start your implementation.
- */
 class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     // you can use the broker to broadcast messages i.e. broker.publish(biddersTopic, LookingFor(...))
     private val broker by resolve<BrokerAgentRef>()
@@ -20,7 +17,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
     private val explorationRate: Double = 0.5
-    private val nPreferredGoods: Int = 2
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -88,6 +84,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
                 else -> {}
             }
             while ((wallet?.credits ?: 0.0) < 0.0) {
+                if (wallet?.items?.isEmpty() != false) break
                 val itemToSell = selectItemToSell()
                 val cashIn = CashIn(id, secret, itemToSell, 1)
                 log.debug("CashIn {}", cashIn)
@@ -133,66 +130,30 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
 
-    // Strategy #1: If the buying is more lucrative than selling
-    //   send the selling price to others, otherwise send the buying price
-    // Reason: Lower the prices if trying to buy and vice versa
     private fun getPriceOnRegistered(item: Item): Price {
         val fake = scores(item).minBy { it.value } !!
-        val myFakedAction = fake.key
-        val myFakedPrice = fake.value
-
-        // Debugging
-        log.debug("Faking to {} {} for {}", myFakedAction, item, myFakedPrice)
-        return myFakedPrice
+        return fake.value
     }
 
-    // Strategy #1: Assume that the market price is the median of the rival bids
-    //   and the private preference is calculated by using the rival price
-    //   because we don't have another choice or information source to check if
-    //   the rivals are bluffing or not
-    // Return the price of action which is more lucrative
     private fun getPriceOnLookingFor(item: Item): Price {
         val marketPrice = median(rivalBids[item]!!)
         val real = scores(item, marketPrice).maxBy { it.value } !!
-        val myRealAction = real.key
-        val myRealPrice = real.value
-
-        // Debugging
-        log.debug("Actually wanting to {} {} for {}", myRealAction, item, myRealPrice)
-        return myRealPrice
+        return real.value
     }
 
-    // Strategy #1: Assume that now we have a valid market price and the
-    //   rival price too. Similar as in getPriceOnRegistered, we can fake
-    //   the image of selling it, whereas we want in fact to buy it (or vice versa)
-    //   Assuming the rival is
     private fun getPriceOnDigest(item: Item): Price {
-        val fake = scores(item).minBy { it.value } !!
-        val myFakedAction = fake.key
+        val fake = scores(item).minBy { it.value }!!
         val myFakedPrice = fake.value
 
         val theirPublicPrice = median(rivalBids[item]!!)
         val marketPrice = digest!!.itemStats[item]!!.median
-
-        // Rival wants to buy: 8 / 5 = 5 / 3 = 3 / 2 = ... golden ratio
-        // Rival wants to sell: 3 / 5 = 2 / 3 = ... inverse of golden ratio
-        // marketPrice ** 2 / theirPublicPrice = theirActualPrice
-        // Making their actual prices public -> faking their opposite tendency
-        val theirActualPrice = marketPrice * marketPrice / theirPublicPrice
-        val actualRivalTendency = if (theirActualPrice > theirPublicPrice) Delta.BUY else Delta.SELL
-        val geometricMeanOfBluffedPrices = sqrt(myFakedPrice * theirActualPrice)
-
-        // Debugging
-        log.debug("Rival wants to {} at {}", actualRivalTendency, theirActualPrice)
-        log.debug("I want to fake my private preference and {} at {}", myFakedAction, marketPrice)
-        log.debug("My best price range: between {} and {}", myFakedPrice, theirActualPrice)
-        log.debug("So my best price is: {}", geometricMeanOfBluffedPrices)
-        return geometricMeanOfBluffedPrices
+        val fakeFactor = sqrt(myFakedPrice / theirPublicPrice)
+        return fakeFactor * marketPrice
     }
 
     private fun selectItemToSell(): Item {
         return if (Math.random() < explorationRate) wallet!!.items.keys.random()
-        else wallet!!.items.minBy { it.value }!!.key
+        else wallet!!.items.maxBy { it.value }!!.key
     }
 
     private fun scores(item: Item, price: Price = 0.0): MutableMap<Delta, Price> {
@@ -203,9 +164,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     }
 
     private fun score(item: Item, want: Delta, marketPrice: Price = 0.0): Price {
-        if (wallet == null) {
-            throw IllegalStateException("Wallet is not initialized")
-        }
+        if (wallet == null) throw IllegalStateException("Wallet is not initialized")
+
         var transferAmount = -want.toInt() * marketPrice
         if (!wallet!!.items.containsKey(item) || wallet!!.items[item]!! < want.toInt()) {
             transferAmount *= 2
