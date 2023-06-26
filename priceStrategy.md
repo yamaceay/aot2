@@ -85,3 +85,9 @@ private fun getPriceOnDigest(item: Item): Price {
     return fakeFactor * marketPrice
 }
 ```
+
+### Fred
+
+Es lohnt sich nicht, gleichzeitig mehrere Produkte zu kaufen. Deshalb präferiert er wenig Produkte, die er initial bekommt hat.
+Wenn kein Profit mehr zu machen ist oder so zu scheint, dann verkauft er alles durch CashIn-Requests und reinvestiert seine
+Krediten in anderen Produkten. Die teuren Produkte werden shortgesellt ohne Verluste.

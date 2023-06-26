@@ -4,7 +4,6 @@ import de.dailab.jiacvi.aot.auction.*
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
-import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
@@ -20,6 +19,7 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
+    private val explorationRate: Double = 0.5
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -28,13 +28,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
                 STAY -> 0
                 BUY -> 1
             }
-        }
-    }
-    fun toDelta(int: Int): Delta {
-        return when (int) {
-            1 -> Delta.BUY
-            -1 -> Delta.SELL
-            else -> Delta.STAY
         }
     }
     override fun behaviour() = act {
@@ -92,6 +85,16 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
                 Transfer.SOLD -> wallet?.update(it.item, -1, +it.price)
                 Transfer.BOUGHT -> wallet?.update(it.item, +1, -it.price)
                 else -> {}
+            }
+            while ((wallet?.credits ?: 0.0) < 0.0) {
+                val itemToSell = selectItemToSell()
+                val cashIn = CashIn(id, secret, itemToSell, 1)
+                log.debug("CashIn {}", cashIn)
+
+                val ref = system.resolve(auctioneer)
+                ref invoke ask<CashInResult>(cashIn) { res ->
+                    log.debug("CashInResult: {}", res)
+                }
             }
         }
 
@@ -184,6 +187,11 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         log.debug("My best price range: between {} and {}", myFakedPrice, theirActualPrice)
         log.debug("So my best price is: {}", geometricMeanOfBluffedPrices)
         return geometricMeanOfBluffedPrices
+    }
+
+    private fun selectItemToSell(): Item {
+        return if (Math.random() < explorationRate) wallet!!.items.keys.random()
+        else wallet!!.items.minBy { it.value }!!.key
     }
 
     private fun scores(item: Item, price: Price = 0.0): MutableMap<Delta, Price> {
