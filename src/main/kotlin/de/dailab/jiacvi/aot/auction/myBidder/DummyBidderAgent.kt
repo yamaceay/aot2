@@ -4,6 +4,7 @@ import de.dailab.jiacvi.aot.auction.*
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
@@ -16,8 +17,10 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
+
     private val explorationRate: Double = 0.5
     private val punishFactor: Double = 2.0
+    private val offerThreshold: Double = 0.9
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -29,9 +32,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
     override fun behaviour() = act {
-        // TODO implement your bidding strategie. When to offer (buy/sell) items
-        //  at which price. You can also use the cashin function if you need money.
-
         // register to all started auctions
         listen<StartAuction>(biddersTopic) {
             val message = Register(id)
@@ -51,8 +51,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
             for (walletItem in wallet!!.items) {
                 val price = getPriceOnRegistered(walletItem.key)
-                if (price < 0.0) {
-                    throw Exception("Price should not be negative")
+                if (price <= 0.0) {
+                    throw Exception("Price should be positive")
                 }
 
                 val lookingFor = LookingFor(walletItem.key, price)
@@ -67,16 +67,19 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             rivalBids.putIfAbsent(it.item, mutableListOf())
             rivalBids[it.item]!!.add(it.price)
 
-            val price = getPriceOnLookingFor(it.item);
-            if (price < 0.0) {
-                throw Exception("Price should not be negative")
-            }
+            val offerPair = getPriceOnLookingFor(it.item)
+            if (offerPair.second) {
+                val price = offerPair.first
+                if (price <= 0.0) {
+                    throw Exception("Price should be positive")
+                }
 
-            val offer = Offer(id, secret, it.item, price)
-            log.debug("Sending {}", offer)
-            val ref = system.resolve(auctioneer)
-            ref invoke ask<Boolean>(offer) { res ->
-                log.debug("OfferAccepted: $res")
+                val offer = Offer(id, secret, it.item, price)
+                log.debug("Sending {}", offer)
+                val ref = system.resolve(auctioneer)
+                ref invoke ask<Boolean>(offer) { res ->
+                    log.debug("OfferAccepted: $res")
+                }
             }
         }
 
@@ -107,8 +110,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
             for (item in it.itemStats.keys) {
                 val price = getPriceOnDigest(item)
-                if (price < 0.0) {
-                    throw Exception("Price should not be negative")
+                if (price <= 0.0) {
+                    throw Exception("Price should be positive")
                 }
 
                 val lookingFor = LookingFor(item, price)
@@ -122,18 +125,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         // be notified of result of the entire auction
         on<AuctionResult> {
             log.info("Result of Auction: $it")
-
-            for (walletItem in wallet!!.items) {
-                val item = walletItem.key
-                val count = walletItem.value
-                val cashIn = CashIn(id, secret, item, count)
-                log.debug("CashIn {}", cashIn)
-
-                val ref = system.resolve(auctioneer)
-                ref invoke ask<CashInResult>(cashIn) { res ->
-                    log.debug("CashInResult: {}", res)
-                }
-            }
             wallet = null
         }
     }
@@ -142,9 +133,13 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         return scores(item).values.min()!!
     }
 
-    private fun getPriceOnLookingFor(item: Item): Price {
+    private fun getPriceOnLookingFor(item: Item): Pair<Price, Boolean> {
         val marketPrice = median(rivalBids[item]!!)
-        return scores(item, marketPrice).values.max()!!
+        val buyValue = score(item, Delta.BUY, marketPrice)
+        val sellValue = score(item, Delta.SELL, marketPrice)
+        val shiftFactor = sqrt(buyValue / sellValue)
+        val shiftMatters = shiftFactor / offerThreshold <= 1 || shiftFactor * offerThreshold >= 1
+        return Pair(marketPrice * shiftFactor, shiftMatters)
     }
 
     private fun getPriceOnDigest(item: Item): Price {
