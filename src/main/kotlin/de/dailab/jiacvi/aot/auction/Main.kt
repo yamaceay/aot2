@@ -10,7 +10,7 @@ fun main() {
         enable(LocalBroker)
         // TODO change the amount of bidders here or the composition if you have different types of agents for testing.
         agents {
-            add(AuctioneerAgent(5,
+            add(AuctioneerAgent(20,
                 2, 1))
             for (i in (1..4)) {
                 add(DummyBidderAgent("dummy-$i"))
