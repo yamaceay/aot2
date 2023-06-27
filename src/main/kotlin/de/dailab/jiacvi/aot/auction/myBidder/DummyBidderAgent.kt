@@ -4,12 +4,8 @@ import de.dailab.jiacvi.aot.auction.*
 import de.dailab.jiacvi.Agent
 import de.dailab.jiacvi.BrokerAgentRef
 import de.dailab.jiacvi.behaviour.act
-import kotlin.math.max
 import kotlin.math.sqrt
 
-/**
- * This is a simple stub of the Bidder Agent. You can use this as a template to start your implementation.
- */
 class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     // you can use the broker to broadcast messages i.e. broker.publish(biddersTopic, LookingFor(...))
     private val broker by resolve<BrokerAgentRef>()
@@ -20,6 +16,8 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
     private var digest: Digest? = null
     private var rivalBids: MutableMap<Item, MutableList<Price>> = mutableMapOf()
+    private val explorationRate: Double = 0.5
+    private val punishFactor: Double = 2.0
     enum class Delta {
         SELL, STAY, BUY;
         fun toInt(): Int {
@@ -28,13 +26,6 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
                 STAY -> 0
                 BUY -> 1
             }
-        }
-    }
-    fun toDelta(int: Int): Delta {
-        return when (int) {
-            1 -> Delta.BUY
-            -1 -> Delta.SELL
-            else -> Delta.STAY
         }
     }
     override fun behaviour() = act {
@@ -60,11 +51,13 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
             for (walletItem in wallet!!.items) {
                 val price = getPriceOnRegistered(walletItem.key)
-                if (price >= 0.0) {
-                    val lookingFor = LookingFor(walletItem.key, price)
-                    log.info("Sending $lookingFor")
-                    broker.publish(biddersTopic, lookingFor)
+                if (price < 0.0) {
+                    throw Exception("Price should not be negative")
                 }
+
+                val lookingFor = LookingFor(walletItem.key, price)
+                log.info("Sending $lookingFor")
+                broker.publish(biddersTopic, lookingFor)
             }
         }
 
@@ -75,13 +68,15 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
             rivalBids[it.item]!!.add(it.price)
 
             val price = getPriceOnLookingFor(it.item);
-            if (price >= 0.0) {
-                val offer = Offer(id, secret, it.item, price)
-                log.debug("Sending {}", offer)
-                val ref = system.resolve(auctioneer)
-                ref invoke ask<Boolean>(offer) { res ->
-                    log.debug("OfferAccepted: $res")
-                }
+            if (price < 0.0) {
+                throw Exception("Price should not be negative")
+            }
+
+            val offer = Offer(id, secret, it.item, price)
+            log.debug("Sending {}", offer)
+            val ref = system.resolve(auctioneer)
+            ref invoke ask<Boolean>(offer) { res ->
+                log.debug("OfferAccepted: $res")
             }
         }
 
@@ -93,6 +88,17 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
                 Transfer.BOUGHT -> wallet?.update(it.item, +1, -it.price)
                 else -> {}
             }
+            while ((wallet?.credits ?: 0.0) < 0.0) {
+                if (wallet?.items?.isEmpty() != false) break
+                val itemToSell = selectItemToSell()
+                val cashIn = CashIn(id, secret, itemToSell, 1)
+                log.debug("CashIn {}", cashIn)
+
+                val ref = system.resolve(auctioneer)
+                ref invoke ask<CashInResult>(cashIn) { res ->
+                    log.debug("CashInResult: {}", res)
+                }
+            }
         }
 
         listen<Digest>(biddersTopic) {
@@ -101,11 +107,14 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
 
             for (item in it.itemStats.keys) {
                 val price = getPriceOnDigest(item)
-                if (price >= 0.0) {
-                    val lookingFor = LookingFor(item, price)
-                    log.info("Sending $lookingFor")
-                    broker.publish(biddersTopic, lookingFor)
+                if (price < 0.0) {
+                    throw Exception("Price should not be negative")
                 }
+
+                val lookingFor = LookingFor(item, price)
+                log.info("Sending $lookingFor")
+                broker.publish(biddersTopic, lookingFor)
+
             }
             rivalBids = mutableMapOf()
         }
@@ -129,61 +138,26 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
         }
     }
 
-    // Strategy #1: If the buying is more lucrative than selling
-    //   send the selling price to others, otherwise send the buying price
-    // Reason: Lower the prices if trying to buy and vice versa
     private fun getPriceOnRegistered(item: Item): Price {
-        val fake = scores(item).minBy { it.value } !!
-        val myFakedAction = fake.key
-        val myFakedPrice = fake.value
-
-        // Debugging
-        log.debug("Faking to {} {} for {}", myFakedAction, item, myFakedPrice)
-        return myFakedPrice
+        return scores(item).values.min()!!
     }
 
-    // Strategy #1: Assume that the market price is the median of the rival bids
-    //   and the private preference is calculated by using the rival price
-    //   because we don't have another choice or information source to check if
-    //   the rivals are bluffing or not
-    // Return the price of action which is more lucrative
     private fun getPriceOnLookingFor(item: Item): Price {
         val marketPrice = median(rivalBids[item]!!)
-        val real = scores(item, marketPrice).maxBy { it.value } !!
-        val myRealAction = real.key
-        val myRealPrice = real.value
-
-        // Debugging
-        log.debug("Actually wanting to {} {} for {}", myRealAction, item, myRealPrice)
-        return myRealPrice
+        return scores(item, marketPrice).values.max()!!
     }
 
-    // Strategy #1: Assume that now we have a valid market price and the
-    //   rival price too. Similar as in getPriceOnRegistered, we can fake
-    //   the image of selling it, whereas we want in fact to buy it (or vice versa)
-    //   Assuming the rival is
     private fun getPriceOnDigest(item: Item): Price {
-        val fake = scores(item).minBy { it.value } !!
-        val myFakedAction = fake.key
-        val myFakedPrice = fake.value
-
-        val theirPublicPrice = median(rivalBids[item]!!)
+        val myFakedPrice = scores(item).values.min()!!
+        val theirFakedPrice = median(rivalBids[item]!!)
         val marketPrice = digest!!.itemStats[item]!!.median
+        val fakeFactor = sqrt(myFakedPrice / theirFakedPrice)
+        return fakeFactor * marketPrice
+    }
 
-        // Rival wants to buy: 8 / 5 = 5 / 3 = 3 / 2 = ... golden ratio
-        // Rival wants to sell: 3 / 5 = 2 / 3 = ... inverse of golden ratio
-        // marketPrice ** 2 / theirPublicPrice = theirActualPrice
-        // Making their actual prices public -> faking their opposite tendency
-        val theirActualPrice = marketPrice * marketPrice / theirPublicPrice
-        val actualRivalTendency = if (theirActualPrice > theirPublicPrice) Delta.BUY else Delta.SELL
-        val geometricMeanOfBluffedPrices = sqrt(myFakedPrice * theirActualPrice)
-
-        // Debugging
-        log.debug("Rival wants to {} at {}", actualRivalTendency, theirActualPrice)
-        log.debug("I want to fake my private preference and {} at {}", myFakedAction, marketPrice)
-        log.debug("My best price range: between {} and {}", myFakedPrice, theirActualPrice)
-        log.debug("So my best price is: {}", geometricMeanOfBluffedPrices)
-        return geometricMeanOfBluffedPrices
+    private fun selectItemToSell(): Item {
+        return if (Math.random() < explorationRate) wallet!!.items.keys.random()
+        else wallet!!.items.maxBy { it.value }!!.key
     }
 
     private fun scores(item: Item, price: Price = 0.0): MutableMap<Delta, Price> {
@@ -194,16 +168,14 @@ class DummyBidderAgent(private val id: String): Agent(overrideName=id) {
     }
 
     private fun score(item: Item, want: Delta, marketPrice: Price = 0.0): Price {
-        if (wallet == null) {
-            throw IllegalStateException("Wallet is not initialized")
-        }
-        var transferAmount = -want.toInt() * marketPrice
-        if (!wallet!!.items.containsKey(item) || wallet!!.items[item]!! < want.toInt()) {
-            transferAmount *= 2
-        }
+        if (wallet == null) throw IllegalStateException("Wallet is not initialized")
 
-        val difference = diffWallet(wallet!!, item, want.toInt(), transferAmount)
-        return want.toInt() * difference
+        val difference = diffWallet(wallet!!, item, want.toInt(), -want.toInt() * marketPrice)
+        var preference = want.toInt() * difference
+        if (!wallet!!.items.containsKey(item) || wallet!!.items[item]!! < 0) {
+            if (want === Delta.SELL) preference *= punishFactor
+        }
+        return preference
     }
     private fun diffWallet(wallet: Wallet, item: Item, count: Int, credits: Price = 0.0): Price {
         val oldValue = wallet.value()
